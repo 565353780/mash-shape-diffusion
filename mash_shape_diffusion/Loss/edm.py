@@ -2,8 +2,7 @@ import torch
 
 
 class EDMLoss:
-    # def __init__(self, P_mean=-1.2, P_std=1.2, sigma_data=1):
-    def __init__(self, P_mean=0.0, P_std=0.12, sigma_data=1):
+    def __init__(self, P_mean=-1.2, P_std=1.2, sigma_data=1):
         self.P_mean = P_mean
         self.P_std = P_std
         self.sigma_data = sigma_data

@@ -140,7 +140,7 @@ class Trainer(object):
 
         self.logger = Logger()
 
-        self.loss_func = EDMLoss()
+        self.loss_func = EDMLoss(-6.0, 2.0)
         return
 
     def loadSummaryWriter(self):

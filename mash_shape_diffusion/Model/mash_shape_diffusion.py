@@ -101,17 +101,10 @@ class MashShapeDiffusion(torch.nn.Module):
 
     @torch.no_grad()
     def sample(self, cond, batch_seeds=None, diffuse_steps:int = 18, step_sample: bool=False):
-        # print(batch_seeds)
-        if cond is not None:
-            batch_size, device = *cond.shape, cond.device
-            if batch_seeds is None:
-                batch_seeds = torch.arange(batch_size)
-        else:
-            device = batch_seeds.device
-            batch_size = batch_seeds.shape[0]
-
-        # batch_size, device = *cond.shape, cond.device
-        # batch_seeds = torch.arange(batch_size)
+        pose_params = cond['pose_params']
+        batch_size, device = pose_params.shape[0], pose_params.device
+        if batch_seeds is None:
+            batch_seeds = torch.arange(batch_size)
 
         rnd = StackedRandomGenerator(device, batch_seeds)
         latents = rnd.randn([batch_size, self.n_latents, self.channels], device=device)
