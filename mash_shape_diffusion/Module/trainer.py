@@ -25,20 +25,18 @@ def worker_init_fn(worker_id):
 class Trainer(object):
     def __init__(self):
         self.mash_channel = 400
-        self.sh_2d_degree = 3
-        self.sh_3d_degree = 2
-        self.channels = int(
-            6 + (2 * self.sh_2d_degree + 1) + ((self.sh_3d_degree + 1) ** 2)
-        )
+        self.mask_degree = 3
+        self.sh_degree = 2
+        self.d_hidden_embed = 48
+        self.context_dim = 768
         self.n_heads = 1
         self.d_head = 256
         self.depth = 24
-        self.context_dim = 768
 
         self.batch_size = 32
         self.accumulation_steps = 1
         self.num_workers = 16
-        self.lr = 1e-4
+        self.lr = 1e-5
         self.weight_decay = 1e-10
         self.factor = 0.9
         self.patience = 1000
@@ -57,14 +55,8 @@ class Trainer(object):
             + str(self.batch_size * self.accumulation_steps)
             + "_warmup"
             + str(self.warmup_epochs)
-            + "_train"
-            + str(self.train_epochs)
-            + "_mash"
-            + str(self.mash_channel)
-            + "_sh2d"
-            + str(self.sh_2d_degree)
-            + "_sh3d"
-            + str(self.sh_3d_degree)
+            + "_dembed"
+            + str(self.d_hidden_embed)
             + "_nheads"
             + str(self.n_heads)
             + "_dheah"
@@ -92,11 +84,13 @@ class Trainer(object):
 
         self.model = MashShapeDiffusion(
             n_latents=self.mash_channel,
-            channels=self.channels,
+            mask_degree=self.mask_degree,
+            sh_degree=self.sh_degree,
+            d_hidden_embed=self.d_hidden_embed,
+            context_dim=self.context_dim,
             n_heads=self.n_heads,
             d_head=self.d_head,
             depth=self.depth,
-            context_dim=self.context_dim,
         ).to(self.device)
         self.model = DDP(self.model, device_ids=[self.device_id])
 
@@ -209,10 +203,10 @@ class Trainer(object):
     def getLr(self) -> float:
         return self.optimizer.state_dict()["param_groups"][0]["lr"]
 
-    def trainStep(self, mash_params, condition):
+    def trainStep(self, shape_params, condition_dict):
         self.model.train()
 
-        loss = self.loss_func(self.model, mash_params, condition)
+        loss = self.loss_func(self.model, shape_params, condition_dict)
 
         loss_item = loss.clone().detach().cpu().numpy()
 
@@ -257,8 +251,17 @@ class Trainer(object):
                 self.step += 1
 
                 mash_params = data["mash_params"].to(self.device, non_blocking=True)
+                pose_params = mash_params[:, :, :6]
+                shape_params = mash_params[:, :, 6:]
+
                 categories = data["category_id"].to(self.device, non_blocking=True)
-                loss = self.trainStep(mash_params, categories)
+
+                condition_dict = {
+                    'pose_params': pose_params,
+                    'condition': categories,
+                }
+
+                loss = self.trainStep(shape_params, condition_dict)
 
                 if print_progress:
                     pbar.set_description(
@@ -282,12 +285,20 @@ class Trainer(object):
                 self.step += 1
 
                 mash_params = data["mash_params"].to(self.device, non_blocking=True)
+                pose_params = mash_params[:, :, :6]
+                shape_params = mash_params[:, :, 6:]
+
                 image_embedding = data["image_embedding"]
                 key_idx = np.random.choice(len(image_embedding.keys()))
                 key = list(image_embedding.keys())[key_idx]
                 image_embedding = image_embedding[key].to(self.device, non_blocking=True)
 
-                loss = self.trainStep(mash_params, image_embedding)
+                condition_dict = {
+                    'pose_params': pose_params,
+                    'condition': image_embedding,
+                }
+
+                loss = self.trainStep(shape_params, condition_dict)
 
                 if print_progress:
                     pbar.set_description(
