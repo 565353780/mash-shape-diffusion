@@ -24,6 +24,9 @@ class EDMLoss:
 
         n = torch.randn_like(inputs) * sigma
 
+        print('sigma:', sigma)
+        print('weight:', weight)
+
         noise_data = inputs + n
         return noise_data
 

@@ -33,15 +33,15 @@ class Trainer(object):
         self.d_head = 256
         self.depth = 24
 
-        self.batch_size = 32
+        self.batch_size = 48
         self.accumulation_steps = 1
         self.num_workers = 16
-        self.lr = 1e-5
+        self.lr = 1e-4
         self.weight_decay = 1e-10
         self.factor = 0.9
         self.patience = 1000
         self.min_lr = 1e-6
-        self.warmup_epochs = 4
+        self.warmup_epochs = 4 * 2
         self.train_epochs = 100000
         self.step = 0
         self.eval_step = 0
