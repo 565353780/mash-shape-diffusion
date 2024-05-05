@@ -14,7 +14,8 @@ class DDPM(nn.Module):
         self.n_T = n_T
         self.device = device
         self.drop_prob = drop_prob
-        self.loss_mse = nn.MSELoss()
+        self.loss_fn = nn.MSELoss()
+        return
 
     def forward(self, x, c):
         """
@@ -31,8 +32,8 @@ class DDPM(nn.Module):
         # We should predict the "error term" from this x_t. Loss is what we return.
 
 
-        # return MSE between added noise, and our predicted noise
-        return self.loss_mse(noise, self.nn_model(x_t, c, _ts / self.n_T, self.drop_prob))
+        # return Loss between added noise, and our predicted noise
+        return self.loss_fn(noise, self.nn_model(x_t, c, _ts / self.n_T, self.drop_prob))
 
     def sample(self, noise, condition_dict, n_sample, guide_w = 0.0, store_num=20, store_last_itr_num=8):
         # we follow the guidance sampling scheme described in 'Classifier-Free Diffusion Guidance'

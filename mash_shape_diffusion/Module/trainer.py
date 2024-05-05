@@ -91,7 +91,7 @@ class Trainer(object):
             base_model = MashSSM().to(self.device)
         self.model = DDPM(base_model,
                           betas=(1e-4, 0.02),
-                          n_T=2000,
+                          n_T=2800,
                           device=self.device,
                           drop_prob=0.1
         ).to(self.device)
