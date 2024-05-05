@@ -86,7 +86,7 @@ class Trainer(object):
                                   d_hidden_embed=48, context_dim=768,n_heads=1,
                                   d_head=256,depth=12),
                           betas=(1e-4, 0.02),
-                          n_T=400,
+                          n_T=36,
                           device=self.device,
                           drop_prob=0.1
         ).to(self.device)

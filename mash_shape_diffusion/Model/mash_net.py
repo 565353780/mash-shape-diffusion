@@ -62,8 +62,8 @@ class MashNet(torch.nn.Module):
         pose_embeddings = self.embedPose(pose_params)
         condition = torch.cat([pose_embeddings, condition], dim=1)
 
-        denoised_shape_params = self.model(shape_params, t, cond=condition)
-        return denoised_shape_params
+        shape_params_noise = self.model(shape_params, t, cond=condition)
+        return shape_params_noise
 
     def forward(self, shape_params, condition_dict, t, condition_drop_prob):
         pose_params = condition_dict['pose_params']
