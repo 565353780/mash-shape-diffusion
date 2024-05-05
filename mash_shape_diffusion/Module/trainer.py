@@ -9,10 +9,10 @@ from torch.optim import AdamW
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from mash_shape_diffusion.Loss.edm import EDMLoss
 from mash_shape_diffusion.Dataset.mash import MashDataset
 from mash_shape_diffusion.Dataset.image_embedding import ImageEmbeddingDataset
-from mash_shape_diffusion.Model.mash_shape_diffusion import MashShapeDiffusion
+from mash_shape_diffusion.Model.ddpm import DDPM
+from mash_shape_diffusion.Model.mash_net import MashNet
 from mash_shape_diffusion.Method.path import createFileFolder, renameFile, removeFile
 from mash_shape_diffusion.Method.time import getCurrentTime
 from mash_shape_diffusion.Module.logger import Logger
@@ -33,7 +33,7 @@ class Trainer(object):
         self.d_head = 256
         self.depth = 24
 
-        self.batch_size = 48
+        self.batch_size = 96
         self.accumulation_steps = 1
         self.num_workers = 16
         self.lr = 1e-4
@@ -41,7 +41,7 @@ class Trainer(object):
         self.factor = 0.9
         self.patience = 1000
         self.min_lr = 1e-6
-        self.warmup_epochs = 4 * 2
+        self.warmup_epochs = 4
         self.train_epochs = 100000
         self.step = 0
         self.eval_step = 0
@@ -82,15 +82,13 @@ class Trainer(object):
         self.device_id = dist.get_rank() % torch.cuda.device_count()
         self.device = "cuda:" + str(self.device_id)
 
-        self.model = MashShapeDiffusion(
-            n_latents=self.mash_channel,
-            mask_degree=self.mask_degree,
-            sh_degree=self.sh_degree,
-            d_hidden_embed=self.d_hidden_embed,
-            context_dim=self.context_dim,
-            n_heads=self.n_heads,
-            d_head=self.d_head,
-            depth=self.depth,
+        self.model = DDPM(MashNet(n_latents=400, mask_degree=3, sh_degree=2,
+                                  d_hidden_embed=48, context_dim=768,n_heads=1,
+                                  d_head=256,depth=12),
+                          betas=(1e-4, 0.02),
+                          n_T=400,
+                          device=self.device,
+                          drop_prob=0.1
         ).to(self.device)
         self.model = DDP(self.model, device_ids=[self.device_id])
 
@@ -140,7 +138,7 @@ class Trainer(object):
 
         self.logger = Logger()
 
-        self.loss_func = EDMLoss(-6.0, 2.0)
+        # self.loss_func = EDMLoss(-4.0, 2.0)
         return
 
     def loadSummaryWriter(self):
@@ -206,7 +204,7 @@ class Trainer(object):
     def trainStep(self, shape_params, condition_dict):
         self.model.train()
 
-        loss = self.loss_func(self.model, shape_params, condition_dict)
+        loss = self.model(shape_params, condition_dict)
 
         loss_item = loss.clone().detach().cpu().numpy()
 

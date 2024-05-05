@@ -28,16 +28,14 @@ class DDPM(nn.Module):
         noise = torch.randn_like(x)  # eps ~ N(0, 1)
 
         x_t = (
-            self.sqrtab[_ts, None, None, None] * x
-            + self.sqrtmab[_ts, None, None, None] * noise
+            self.sqrtab[_ts, None, None] * x
+            + self.sqrtmab[_ts, None, None] * noise
         )  # This is the x_t, which is sqrt(alphabar) x_0 + sqrt(1-alphabar) * eps
         # We should predict the "error term" from this x_t. Loss is what we return.
 
-        # dropout context with some probability
-        context_mask = torch.bernoulli(torch.zeros_like(c)+self.drop_prob).to(self.device)
 
         # return MSE between added noise, and our predicted noise
-        return self.loss_mse(noise, self.nn_model(x_t, c, _ts / self.n_T, context_mask))
+        return self.loss_mse(noise, self.nn_model(x_t, c, _ts / self.n_T, self.drop_prob))
 
     def sample(self, n_sample, size, device, guide_w = 0.0):
         # we follow the guidance sampling scheme described in 'Classifier-Free Diffusion Guidance'
@@ -75,7 +73,7 @@ class DDPM(nn.Module):
             eps = self.nn_model(x_i, c_i, t_is, context_mask)
             eps1 = eps[:n_sample]
             eps2 = eps[n_sample:]
-            eps = (1+guide_w)*eps1 - guide_w*eps2
+            eps = guide_w*eps1 - (1.0 - guide_w)*eps2
             x_i = x_i[:n_sample]
             x_i = (
                 self.oneover_sqrta[i] * (x_i - eps * self.mab_over_sqrtmab[i])
