@@ -1,5 +1,6 @@
 import torch
 import open3d as o3d
+from tqdm import trange
 from copy import deepcopy
 
 import sys
@@ -13,8 +14,9 @@ from mash_shape_diffusion.Method.schedule import ddpm_schedules
 
 def test():
     mash_file_path = '/home/chli/Dataset/MashV3/ShapeNet/03001627/46bd3baefe788d166c05d60b45815.npy'
-    diffu_steps = 36
+    diffu_steps = 1000
     ddpm_sche = ddpm_schedules(1e-4, 2e-2, diffu_steps)
+    save_sample_num = 20
 
     mash = Mash.fromParamsFile(mash_file_path, 10, 400, 0.4, device='cpu')
     mask_params = mash.mask_params
@@ -25,9 +27,8 @@ def test():
     sqrtab = ddpm_sche['sqrtab']
     sqrtmab = ddpm_sche['sqrtmab']
 
-    sample_num = 10
-    for i in range(sample_num):
-        current_t = int(i / (sample_num - 1) * diffu_steps)
+    for i in trange(save_sample_num):
+        current_t = int(i / (save_sample_num - 1) * diffu_steps)
 
         noise = torch.randn_like(shape_params)
 

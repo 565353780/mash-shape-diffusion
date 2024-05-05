@@ -31,7 +31,8 @@ class MashNet(torch.nn.Module):
 
         self.channels = self.mask_dim + self.sh_dim
 
-        assert context_dim % 2 == 0
+        d_hidden = n_heads * d_head
+        assert d_hidden % 2 == 0
 
         self.rotation_embed = PointEmbed(3, d_hidden_embed, context_dim // 2)
         self.position_embed = PointEmbed(3, d_hidden_embed, context_dim // 2)

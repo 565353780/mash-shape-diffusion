@@ -1,6 +1,6 @@
 from torch import nn
 
-from mash_autoencoder.Method.io import exists
+from mash_shape_diffusion.Method.io import exists
 
 
 class PreNorm(nn.Module):

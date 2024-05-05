@@ -10,7 +10,6 @@ from math import sqrt, ceil
 
 from ma_sh.Method.data import toNumpy
 from ma_sh.Method.pcd import getPointCloud
-from ma_sh.Method.render import renderGeometries
 
 from mash_shape_diffusion.Module.sampler import Sampler
 
@@ -32,7 +31,7 @@ def demo():
     valid_model_folder_name_list.sort()
     model_folder_path = valid_model_folder_name_list[-1]
     # model_folder_path = 'pretrain-v5'
-    model_file_path = output_folder_path + model_folder_path + "/model_best.pth"
+    model_file_path = output_folder_path + model_folder_path + "/model_last.pth"
     device = "cuda"
 
     sample_num = 9
@@ -50,11 +49,15 @@ def demo():
 
     mash_model = sampler.toInitialMashModel('cpu')
 
-    for i in tqdm(range(sample_num)):
-        save_folder_path = './output/sample/mash_' + str(i) + '/'
+    for j in range(len(sampled_array_list)):
+        if j != len(sampled_array_list) -  1:
+            continue
+
+        save_folder_path = './output/sample/save_itr_' + str(j) + '/'
         os.makedirs(save_folder_path, exist_ok=True)
 
-        for j in range(len(sampled_array_list)):
+        for i in tqdm(range(sample_num)):
+
             mash_params = sampled_array_list[j][i]
 
             sh2d = 2 * sampler.mask_degree + 1
@@ -76,7 +79,7 @@ def demo():
                 mash_pcd.translate(translate)
 
             o3d.io.write_point_cloud(
-                save_folder_path + 'sample_' + str(j) + '.ply',
+                save_folder_path + 'sample_' + str(i) + '.ply',
                 mash_pcd,
                 write_ascii=True,
             )

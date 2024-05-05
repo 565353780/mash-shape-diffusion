@@ -13,6 +13,7 @@ from mash_shape_diffusion.Dataset.mash import MashDataset
 from mash_shape_diffusion.Dataset.image_embedding import ImageEmbeddingDataset
 from mash_shape_diffusion.Model.ddpm import DDPM
 from mash_shape_diffusion.Model.mash_net import MashNet
+from mash_shape_diffusion.Model.mash_ssm import MashSSM
 from mash_shape_diffusion.Method.path import createFileFolder, renameFile, removeFile
 from mash_shape_diffusion.Method.time import getCurrentTime
 from mash_shape_diffusion.Module.logger import Logger
@@ -29,19 +30,19 @@ class Trainer(object):
         self.sh_degree = 2
         self.d_hidden_embed = 48
         self.context_dim = 768
-        self.n_heads = 1
-        self.d_head = 256
+        self.n_heads = 8
+        self.d_head = 32
         self.depth = 24
 
-        self.batch_size = 96
-        self.accumulation_steps = 1
-        self.num_workers = 16
+        self.batch_size = 32
+        self.accumulation_steps = 8
+        self.num_workers = 0
         self.lr = 1e-4
         self.weight_decay = 1e-10
         self.factor = 0.9
         self.patience = 1000
         self.min_lr = 1e-6
-        self.warmup_epochs = 4
+        self.warmup_epochs = 1
         self.train_epochs = 100000
         self.step = 0
         self.eval_step = 0
@@ -82,11 +83,15 @@ class Trainer(object):
         self.device_id = dist.get_rank() % torch.cuda.device_count()
         self.device = "cuda:" + str(self.device_id)
 
-        self.model = DDPM(MashNet(n_latents=400, mask_degree=3, sh_degree=2,
-                                  d_hidden_embed=48, context_dim=768,n_heads=1,
-                                  d_head=256,depth=12),
+        if True:
+            base_model = MashNet(n_latents=400, mask_degree=3, sh_degree=2,
+                                    d_hidden_embed=48, context_dim=768,n_heads=4,
+                                    d_head=64,depth=24)
+        else:
+            base_model = MashSSM().to(self.device)
+        self.model = DDPM(base_model,
                           betas=(1e-4, 0.02),
-                          n_T=36,
+                          n_T=1000,
                           device=self.device,
                           drop_prob=0.1
         ).to(self.device)

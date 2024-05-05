@@ -8,6 +8,7 @@ from ma_sh.Model.mash import Mash
 from mash_shape_diffusion.Dataset.mash import MashDataset
 from mash_shape_diffusion.Model.ddpm import DDPM
 from mash_shape_diffusion.Model.mash_net import MashNet
+from mash_shape_diffusion.Model.mash_ssm import MashSSM
 
 
 class Sampler(object):
@@ -27,13 +28,17 @@ class Sampler(object):
         self.mask_dim = self.mask_degree * 2 + 1
         self.sh_dim = (self.sh_degree + 1) ** 2
 
-        self.model = DDPM(MashNet(n_latents=400, mask_degree=3, sh_degree=2,
-                                  d_hidden_embed=48, context_dim=768,n_heads=1,
-                                  d_head=256,depth=12),
+        if True:
+            base_model = MashNet(n_latents=400, mask_degree=3, sh_degree=2,
+                                    d_hidden_embed=48, context_dim=768,n_heads=4,
+                                    d_head=64,depth=24)
+        else:
+            base_model = MashSSM().to(self.device)
+
+        self.model = DDPM(base_model,
                           betas=(1e-4, 0.02),
-                          n_T=36,
+                          n_T=1000,
                           device=self.device,
-                          drop_prob=0.1
         ).to(self.device)
 
         if model_file_path is not None:
@@ -122,7 +127,7 @@ class Sampler(object):
             'condition': condition,
         }
 
-        shape_params, middle_shape_params_list = self.model.sample(
+        shape_params, middle_shape_params_array = self.model.sample(
             noise=torch.randn(sample_num, self.mash_channel, self.mask_dim + self.sh_dim).to(self.device),
             condition_dict=condition_dict,
             n_sample=sample_num,
@@ -133,7 +138,7 @@ class Sampler(object):
 
         mash_params_list = []
 
-        for middle_shape_params in middle_shape_params_list:
+        for middle_shape_params in middle_shape_params_array:
             mash_params = np.concatenate([pose_params, middle_shape_params], axis=2)
             mash_params_list.append(mash_params)
 

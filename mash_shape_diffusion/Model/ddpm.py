@@ -37,7 +37,7 @@ class DDPM(nn.Module):
         # return MSE between added noise, and our predicted noise
         return self.loss_mse(noise, self.nn_model(x_t, c, _ts / self.n_T, self.drop_prob))
 
-    def sample(self, noise, condition_dict, n_sample, guide_w = 0.0):
+    def sample(self, noise, condition_dict, n_sample, guide_w = 0.0, store_num=20, store_last_itr_num=8):
         # we follow the guidance sampling scheme described in 'Classifier-Free Diffusion Guidance'
         # to make the fwd passes efficient, we concat two versions of the dataset,
         # one with context_mask=0 and the other context_mask=1
@@ -45,6 +45,7 @@ class DDPM(nn.Module):
         # where w>0 means more guidance
 
         device = noise.device
+        store_skip_num = int(self.n_T/store_num)
 
         x_i = noise  # x_T ~ N(0, 1), sample initial noise
         c_i = condition_dict
@@ -65,7 +66,7 @@ class DDPM(nn.Module):
                 self.oneover_sqrta[i] * (x_i - eps * self.mab_over_sqrtmab[i])
                 + self.sqrt_beta_t[i] * z
             )
-            if i%20==0 or i==self.n_T or i<8:
+            if i%store_skip_num==0 or i==self.n_T or i<=store_last_itr_num:
                 x_i_store.append(x_i.detach().cpu().numpy())
 
         x_i_store = np.array(x_i_store)
