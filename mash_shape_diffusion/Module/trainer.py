@@ -35,7 +35,7 @@ class Trainer(object):
         self.depth = 24
 
         self.batch_size = 32
-        self.accumulation_steps = 8
+        self.accumulation_steps = 1
         self.num_workers = 0
         self.lr = 1e-4
         self.weight_decay = 1e-10
@@ -91,7 +91,7 @@ class Trainer(object):
             base_model = MashSSM().to(self.device)
         self.model = DDPM(base_model,
                           betas=(1e-4, 0.02),
-                          n_T=1000,
+                          n_T=2000,
                           device=self.device,
                           drop_prob=0.1
         ).to(self.device)
@@ -162,7 +162,7 @@ class Trainer(object):
 
         model_dict = torch.load(model_file_path)
 
-        self.model.module.load_state_dict(model_dict["model"])
+        self.model.module.load_state_dict(model_dict['model'])
 
         if not resume_model_only:
             self.optimizer.load_state_dict(model_dict["optimizer"])

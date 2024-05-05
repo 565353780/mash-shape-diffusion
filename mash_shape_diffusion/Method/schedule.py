@@ -1,12 +1,12 @@
 import torch
 
-def ddpm_schedules(beta1, beta2, T):
+def ddpm_schedules(beta1: float = 1e-4, beta2: float = 0.02, T: int = 400, device: str='cuda'):
     """
     Returns pre-computed schedules for DDPM sampling, training process.
     """
     assert beta1 < beta2 < 1.0, "beta1 and beta2 must be in (0, 1)"
 
-    beta_t = (beta2 - beta1) * torch.arange(0, T + 1, dtype=torch.float32) / T + beta1
+    beta_t = (beta2 - beta1) * torch.arange(0, T + 1, dtype=torch.float32, device=device) / T + beta1
     sqrt_beta_t = torch.sqrt(beta_t)
     alpha_t = 1 - beta_t
     log_alpha_t = torch.log(alpha_t)
