@@ -32,68 +32,52 @@ def demo():
     valid_model_folder_name_list.sort()
     model_folder_path = valid_model_folder_name_list[-1]
     # model_folder_path = 'pretrain-v5'
-    model_file_path = output_folder_path + model_folder_path + "/model_last.pth"
-    device = "cpu"
+    model_file_path = output_folder_path + model_folder_path + "/model_best.pth"
+    device = "cuda"
 
     sample_num = 9
-    diffuse_steps = 36
     category_id = 18
 
     print(model_file_path)
     sampler = Sampler(model_file_path, device)
 
     print("start diffuse", sample_num, "mashs....")
-    sampled_array = sampler.sample(sample_num, diffuse_steps, category_id)
+    sampled_array_list = sampler.sample(sample_num, category_id)
 
-    print(
-        sampled_array.shape,
-        sampled_array.max(),
-        sampled_array.min(),
-        sampled_array.mean(),
-        sampled_array.std(),
-    )
-
-    object_dist = [2, 0, 2]
+    object_dist = [2, 2, 2]
 
     row_num = ceil(sqrt(sample_num))
 
-    mash_pcd_list = []
-
-    mash_model = sampler.toInitialMashModel()
+    mash_model = sampler.toInitialMashModel('cpu')
 
     for i in tqdm(range(sample_num)):
-        mash_params = sampled_array[i]
+        save_folder_path = './output/sample/mash_' + str(i) + '/'
+        os.makedirs(save_folder_path, exist_ok=True)
 
-        sh2d = 2 * sampler.mask_degree + 1
+        for j in range(len(sampled_array_list)):
+            mash_params = sampled_array_list[j][i]
 
-        rotation_vectors = mash_params[:, :3]
-        positions = mash_params[:, 3:6]
-        mask_params = mash_params[:, 6 : 6 + sh2d]
-        sh_params = mash_params[:, 6 + sh2d :]
+            sh2d = 2 * sampler.mask_degree + 1
+            rotation_vectors = mash_params[:, :3]
+            positions = mash_params[:, 3:6]
+            mask_params = mash_params[:, 6 : 6 + sh2d]
+            sh_params = mash_params[:, 6 + sh2d :]
 
-        mash_model.loadParams(mask_params, sh_params, rotation_vectors, positions)
-        mash_pcd = getPointCloud(toNumpy(torch.vstack(mash_model.toSamplePoints()[:2])))
+            mash_model.loadParams(mask_params, sh_params, rotation_vectors, positions)
+            mash_pcd = getPointCloud(toNumpy(torch.vstack(mash_model.toSamplePoints()[:2])))
 
-        if True:
-            translate = [
-                int(i / row_num) * object_dist[0],
-                0 * object_dist[1],
-                (i % row_num) * object_dist[2],
-            ]
+            if True:
+                translate = [
+                    int(i / row_num) * object_dist[0],
+                    (i % row_num) * object_dist[1],
+                    j * object_dist[2],
+                ]
 
-            mash_pcd.translate(translate)
+                mash_pcd.translate(translate)
 
-        mash_pcd_list.append(mash_pcd)
-
-    if False:
-        renderGeometries(mash_pcd_list, "sample mash point cloud")
-
-    if True:
-        os.makedirs('./output/', exist_ok=True)
-        for i in range(len(mash_pcd_list)):
             o3d.io.write_point_cloud(
-                "./output/sample_mash_pcd_" + str(i) + ".ply",
-                mash_pcd_list[i],
+                save_folder_path + 'sample_' + str(j) + '.ply',
+                mash_pcd,
                 write_ascii=True,
             )
     return True

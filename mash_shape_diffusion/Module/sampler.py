@@ -1,17 +1,13 @@
 import os
 import torch
 import numpy as np
-from math import sqrt, ceil
-from tqdm import tqdm
 from typing import Union
 
 from ma_sh.Model.mash import Mash
-from ma_sh.Method.data import toNumpy
-from ma_sh.Method.pcd import getPointCloud
-from ma_sh.Module.o3d_viewer import O3DViewer
 
 from mash_shape_diffusion.Dataset.mash import MashDataset
-from mash_shape_diffusion.Model.mash_shape_diffusion import MashShapeDiffusion
+from mash_shape_diffusion.Model.ddpm import DDPM
+from mash_shape_diffusion.Model.mash_net import MashNet
 
 
 class Sampler(object):
@@ -26,18 +22,18 @@ class Sampler(object):
         self.n_heads = 1
         self.d_head = 256
         self.depth = 24
-
         self.device = device
 
-        self.model = MashShapeDiffusion(
-            n_latents=self.mash_channel,
-            mask_degree=self.mask_degree,
-            sh_degree=self.sh_degree,
-            d_hidden_embed=self.d_hidden_embed,
-            context_dim=self.context_dim,
-            n_heads=self.n_heads,
-            d_head=self.d_head,
-            depth=self.depth,
+        self.mask_dim = self.mask_degree * 2 + 1
+        self.sh_dim = (self.sh_degree + 1) ** 2
+
+        self.model = DDPM(MashNet(n_latents=400, mask_degree=3, sh_degree=2,
+                                  d_hidden_embed=48, context_dim=768,n_heads=1,
+                                  d_head=256,depth=12),
+                          betas=(1e-4, 0.02),
+                          n_T=400,
+                          device=self.device,
+                          drop_prob=0.1
         ).to(self.device)
 
         if model_file_path is not None:
@@ -59,13 +55,19 @@ class Sampler(object):
         self.pose_dataset = MashDataset(self.dataset_root_folder_path)
         return
 
-    def toInitialMashModel(self) -> Mash:
+    def toInitialMashModel(self, device: Union[str, None]=None) -> Mash:
+        if device is None:
+            device = self.device
+            
         mash_model = Mash(
             self.mash_channel,
             self.mask_degree,
             self.sh_degree,
+            10,
+            400,
+            0.4,
             dtype=torch.float32,
-            device=self.device,
+            device=device,
         )
         return mash_model
 
@@ -95,9 +97,8 @@ class Sampler(object):
     def sample(
         self,
         sample_num: int,
-        diffuse_steps: int,
         category_id: int = 0,
-    ) -> torch.Tensor:
+        ) ->list: 
         self.model.eval()
 
         pose_idxs = np.random.choice(range(len(self.pose_dataset)), sample_num)
@@ -121,75 +122,19 @@ class Sampler(object):
             'condition': condition,
         }
 
-        shape_params = self.model.sample(
-            cond=condition_dict,
-            batch_seeds=torch.arange(0, sample_num).to(self.device),
-            diffuse_steps=diffuse_steps,
-        ).float()
-
-        mash_params = torch.cat([pose_params, shape_params], dim=2)
-
-        return mash_params
-
-    @torch.no_grad()
-    def step_sample(
-        self,
-        sample_num: int,
-        diffuse_steps: int,
-        category_id: int = 0,
-    ) -> bool:
-        self.model.eval()
-
-        object_dist = [2, 0, 2]
-
-        row_num = ceil(sqrt(sample_num))
-
-        print("start diffuse", sample_num, "mashs....")
-        sampled_array = self.model.sample(
-            cond=torch.Tensor([category_id] * sample_num).long().to(self.device),
-            batch_seeds=torch.arange(0, sample_num).to(self.device),
-            diffuse_steps=diffuse_steps,
-            step_sample=True,
+        shape_params, middle_shape_params_list = self.model.sample(
+            noise=torch.randn(sample_num, self.mash_channel, self.mask_dim + self.sh_dim).to(self.device),
+            condition_dict=condition_dict,
+            n_sample=sample_num,
+            guide_w=1.0,
         )
 
-        o3d_viewer = O3DViewer()
-        o3d_viewer.createWindow()
-        o3d_viewer.update()
+        pose_params = pose_params.cpu().numpy()
 
-        mash_model = self.toInitialMashModel()
-        for i in range(diffuse_steps + 1):
-            print("start create mash points for diffuse step Itr." + str(i) + "...")
+        mash_params_list = []
 
-            o3d_viewer.clearGeometries()
+        for middle_shape_params in middle_shape_params_list:
+            mash_params = np.concatenate([pose_params, middle_shape_params], axis=2)
+            mash_params_list.append(mash_params)
 
-            mash_pcd_list = []
-            for j in tqdm(range(sample_num)):
-                mash_params = sampled_array[i][j]
-
-                sh2d = 2 * self.sh_2d_degree + 1
-
-                rotation_vectors = mash_params[:, :3]
-                positions = mash_params[:, 3:6]
-                mask_params = mash_params[:, 6 : 6 + sh2d]
-                sh_params = mash_params[:, 6 + sh2d :]
-
-                mash_model.loadParams(
-                    mask_params, sh_params, rotation_vectors, positions
-                )
-                mash_points = toNumpy(torch.vstack(mash_model.toSamplePoints()[:2]))
-                pcd = getPointCloud(mash_points)
-
-                translate = [
-                    int(j / row_num) * object_dist[0],
-                    0 * object_dist[1],
-                    (j % row_num) * object_dist[2],
-                ]
-
-                pcd.translate(translate)
-                mash_pcd_list.append(pcd)
-
-            o3d_viewer.addGeometries(mash_pcd_list)
-            o3d_viewer.update()
-
-        o3d_viewer.run()
-        return True
+        return mash_params_list
