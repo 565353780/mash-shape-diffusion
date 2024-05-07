@@ -106,8 +106,8 @@ class Trainer(object):
         ).to(self.device)
         self.model = DDP(self.model, device_ids=[self.device_id])
 
-        encoded_mash_dataset = EncodedMashDataset(self.dataset_root_folder_path)
-        image_embedding_dataset = ImageEmbeddingDataset(self.dataset_root_folder_path)
+        encoded_mash_dataset = EncodedMashDataset(self.dataset_root_folder_path, True)
+        image_embedding_dataset = ImageEmbeddingDataset(self.dataset_root_folder_path, True)
 
         encoded_mash_sampler = DistributedSampler(encoded_mash_dataset)
         image_embedding_sampler = DistributedSampler(image_embedding_dataset)

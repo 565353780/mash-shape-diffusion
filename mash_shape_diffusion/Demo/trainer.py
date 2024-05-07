@@ -4,6 +4,6 @@ def demo():
     model_file_path = "./output/pretrain-S-v4/model_last.pth"
 
     trainer = Trainer()
-    trainer.loadModel(model_file_path, True)
+    #trainer.loadModel(model_file_path, True)
     trainer.train()
     return True
