@@ -9,11 +9,12 @@ from torch.optim import AdamW
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from mash_shape_diffusion.Dataset.mash import MashDataset
+from mash_shape_diffusion.Dataset.encoded_mash import EncodedMashDataset
 from mash_shape_diffusion.Dataset.image_embedding import ImageEmbeddingDataset
 from mash_shape_diffusion.Model.ddpm import DDPM
 from mash_shape_diffusion.Model.mash_net import MashNet
-from mash_shape_diffusion.Model.mash_ssm import MashSSM
+# from mash_shape_diffusion.Model.mash_ssm import MashSSM
+from mash_shape_diffusion.Model.mash_latent_net import MashLatentNet
 from mash_shape_diffusion.Method.path import createFileFolder, renameFile, removeFile
 from mash_shape_diffusion.Method.time import getCurrentTime
 from mash_shape_diffusion.Module.logger import Logger
@@ -26,15 +27,16 @@ def worker_init_fn(worker_id):
 class Trainer(object):
     def __init__(self):
         self.mash_channel = 400
+        self.encoded_mash_channel = 10
         self.mask_degree = 3
         self.sh_degree = 2
         self.d_hidden_embed = 48
         self.context_dim = 768
         self.n_heads = 8
-        self.d_head = 32
+        self.d_head = 64
         self.depth = 24
 
-        self.batch_size = 32
+        self.batch_size = 64
         self.accumulation_steps = 1
         self.num_workers = 0
         self.lr = 1e-4
@@ -83,29 +85,36 @@ class Trainer(object):
         self.device_id = dist.get_rank() % torch.cuda.device_count()
         self.device = "cuda:" + str(self.device_id)
 
-        if True:
-            base_model = MashNet(n_latents=400, mask_degree=3, sh_degree=2,
-                                    d_hidden_embed=48, context_dim=768,n_heads=4,
-                                    d_head=64,depth=24)
-        else:
-            base_model = MashSSM().to(self.device)
+        model_id = 2
+        if model_id == 1:
+            base_model = MashNet(n_latents=self.mash_channel, mask_degree=self.mask_degree, sh_degree=self.sh_degree,
+                                    d_hidden_embed=self.d_hidden_embed, context_dim=self.context_dim,n_heads=self.n_heads,
+                                    d_head=self.d_head,depth=self.depth)
+        elif model_id == 2:
+            base_model = MashLatentNet(n_latents=self.mash_channel, channels=self.encoded_mash_channel,
+                                    context_dim=self.context_dim,n_heads=self.n_heads,
+                                    d_head=self.d_head,depth=self.depth)
+        elif model_id == 3:
+            #base_model = MashSSM().to(self.device)
+            pass
+
         self.model = DDPM(base_model,
                           betas=(1e-4, 0.02),
-                          n_T=2800,
+                          n_T=400,
                           device=self.device,
                           drop_prob=0.1
         ).to(self.device)
         self.model = DDP(self.model, device_ids=[self.device_id])
 
-        mash_dataset = MashDataset(self.dataset_root_folder_path)
+        encoded_mash_dataset = EncodedMashDataset(self.dataset_root_folder_path)
         image_embedding_dataset = ImageEmbeddingDataset(self.dataset_root_folder_path)
 
-        mash_sampler = DistributedSampler(mash_dataset)
+        encoded_mash_sampler = DistributedSampler(encoded_mash_dataset)
         image_embedding_sampler = DistributedSampler(image_embedding_dataset)
 
-        self.mash_dataloader = DataLoader(
-            dataset=mash_dataset,
-            sampler=mash_sampler,
+        self.encoded_mash_dataloader = DataLoader(
+            dataset=encoded_mash_dataset,
+            sampler=encoded_mash_sampler,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             worker_init_fn=worker_init_fn,
@@ -131,11 +140,11 @@ class Trainer(object):
             self.optimizer,
             num_warmup_steps=int(
                 self.warmup_epochs
-                * len(self.mash_dataloader)
+                * len(self.encoded_mash_dataloader)
                 / self.accumulation_steps
             ),
             num_training_steps=int(
-                self.train_epochs * len(self.mash_dataloader) / self.accumulation_steps
+                self.train_epochs * len(self.encoded_mash_dataloader) / self.accumulation_steps
             ),
             lr_end=self.min_lr,
             power=3,
@@ -206,10 +215,10 @@ class Trainer(object):
     def getLr(self) -> float:
         return self.optimizer.state_dict()["param_groups"][0]["lr"]
 
-    def trainStep(self, shape_params, condition_dict):
+    def trainStep(self, encoded_mash: torch.Tensor, condition: torch.Tensor):
         self.model.train()
 
-        loss = self.model(shape_params, condition_dict)
+        loss = self.model(encoded_mash, condition)
 
         loss_item = loss.clone().detach().cpu().numpy()
 
@@ -249,22 +258,14 @@ class Trainer(object):
                     + "..."
                 )
             if print_progress:
-                pbar = tqdm(total=len(self.mash_dataloader))
-            for data in self.mash_dataloader:
+                pbar = tqdm(total=len(self.encoded_mash_dataloader))
+            for data in self.encoded_mash_dataloader:
                 self.step += 1
 
-                mash_params = data["mash_params"].to(self.device, non_blocking=True)
-                pose_params = mash_params[:, :, :6]
-                shape_params = mash_params[:, :, 6:]
+                encoded_mash = data["encoded_mash"].to(self.device, non_blocking=True)
+                condition = data["category_id"].to(self.device, non_blocking=True)
 
-                categories = data["category_id"].to(self.device, non_blocking=True)
-
-                condition_dict = {
-                    'pose_params': pose_params,
-                    'condition': categories,
-                }
-
-                loss = self.trainStep(shape_params, condition_dict)
+                loss = self.trainStep(encoded_mash, condition)
 
                 if print_progress:
                     pbar.set_description(
@@ -287,21 +288,13 @@ class Trainer(object):
             for data in self.image_embedding_dataloader:
                 self.step += 1
 
-                mash_params = data["mash_params"].to(self.device, non_blocking=True)
-                pose_params = mash_params[:, :, :6]
-                shape_params = mash_params[:, :, 6:]
-
+                encoded_mash = data["encoded_mash"].to(self.device, non_blocking=True)
                 image_embedding = data["image_embedding"]
                 key_idx = np.random.choice(len(image_embedding.keys()))
                 key = list(image_embedding.keys())[key_idx]
-                image_embedding = image_embedding[key].to(self.device, non_blocking=True)
+                condition = image_embedding[key].to(self.device, non_blocking=True)
 
-                condition_dict = {
-                    'pose_params': pose_params,
-                    'condition': image_embedding,
-                }
-
-                loss = self.trainStep(shape_params, condition_dict)
+                loss = self.trainStep(encoded_mash, condition)
 
                 if print_progress:
                     pbar.set_description(

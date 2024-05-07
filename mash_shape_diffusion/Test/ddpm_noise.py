@@ -14,8 +14,8 @@ from mash_shape_diffusion.Method.schedule import ddpm_schedules
 
 def test():
     mash_file_path = '/home/chli/Dataset/MashV3/ShapeNet/03001627/46bd3baefe788d166c05d60b45815.npy'
-    diffu_steps = 2800
-    ddpm_sche = ddpm_schedules(1e-4, 2e-2, diffu_steps)
+    diffu_steps = 400
+    ddpm_sche = ddpm_schedules(1e-4, 0.02, diffu_steps)
     save_sample_num = 20
 
     mash = Mash.fromParamsFile(mash_file_path, 10, 400, 0.4, device='cpu')
@@ -27,8 +27,12 @@ def test():
     sqrtab = ddpm_sche['sqrtab']
     sqrtmab = ddpm_sche['sqrtmab']
 
-    print(sqrtab)
-    print(sqrtmab)
+    print(torch.min(sqrtab))
+    print(torch.mean(sqrtab))
+    print(torch.max(sqrtab))
+    print(torch.min(sqrtmab))
+    print(torch.mean(sqrtmab))
+    print(torch.max(sqrtmab))
     exit()
 
     for i in trange(save_sample_num):

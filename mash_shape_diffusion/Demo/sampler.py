@@ -30,7 +30,7 @@ def demo():
 
     valid_model_folder_name_list.sort()
     model_folder_path = valid_model_folder_name_list[-1]
-    # model_folder_path = 'pretrain-v5'
+    model_folder_path = 'pretrain-S'
     model_file_path = output_folder_path + model_folder_path + "/model_last.pth"
     device = "cuda"
 

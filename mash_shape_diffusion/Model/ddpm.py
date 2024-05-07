@@ -35,7 +35,7 @@ class DDPM(nn.Module):
         # return Loss between added noise, and our predicted noise
         return self.loss_fn(noise, self.nn_model(x_t, c, _ts / self.n_T, self.drop_prob))
 
-    def sample(self, noise, condition_dict, n_sample, guide_w = 0.0, store_num=20, store_last_itr_num=8):
+    def sample(self, noise, condition, n_sample, guide_w = 0.0, store_num=20, store_last_itr_num=8):
         # we follow the guidance sampling scheme described in 'Classifier-Free Diffusion Guidance'
         # to make the fwd passes efficient, we concat two versions of the dataset,
         # one with context_mask=0 and the other context_mask=1
@@ -46,7 +46,7 @@ class DDPM(nn.Module):
         store_skip_num = int(self.n_T/store_num)
 
         x_i = noise  # x_T ~ N(0, 1), sample initial noise
-        c_i = condition_dict
+        c_i = condition
 
         x_i_store = [] # keep track of generated steps in case want to plot something 
         print()
