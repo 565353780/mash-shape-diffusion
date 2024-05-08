@@ -36,7 +36,7 @@ class Trainer(object):
         self.d_head = 64
         self.depth = 24
 
-        self.batch_size = 64
+        self.batch_size = 32
         self.accumulation_steps = 1
         self.num_workers = 0
         self.lr = 1e-4

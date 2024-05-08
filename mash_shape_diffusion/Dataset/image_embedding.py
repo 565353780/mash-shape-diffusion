@@ -89,12 +89,14 @@ class ImageEmbeddingDataset(Dataset):
             encoded_mash = np.load(encoded_mash_file_path)
             image_embedding = np.load(image_embedding_file_path, allow_pickle=True).item()
 
-        encoded_mash = torch.from_numpy(encoded_mash)
+        encoded_mash_tensor = torch.from_numpy(encoded_mash).float()
 
-        data['encoded_mash'] = encoded_mash.float()
+        data['encoded_mash'] = encoded_mash_tensor
+
+        image_embedding_tensor = {}
 
         for key, item in image_embedding.items():
-            image_embedding[key] = torch.from_numpy(item).float()
+            image_embedding_tensor[key] = torch.from_numpy(item).float()
 
-        data['image_embedding'] = image_embedding
+        data['image_embedding'] = image_embedding_tensor
         return data
