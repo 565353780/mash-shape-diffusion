@@ -1,63 +1,55 @@
 import os
 import torch
-import numpy as np
 from typing import Union
 
 from ma_sh.Model.mash import Mash
 
-from mash_shape_diffusion.Dataset.mash import MashDataset
+from mash_autoencoder.Module.detector import Detector
+
 from mash_shape_diffusion.Model.ddpm import DDPM
 from mash_shape_diffusion.Model.mash_net import MashNet
 from mash_shape_diffusion.Model.mash_ssm import MashSSM
+from mash_shape_diffusion.Model.mash_latent_net import MashLatentNet
 
 
 class Sampler(object):
     def __init__(
-        self, model_file_path: Union[str, None] = None, device: str = "cpu"
+        self, model_file_path: Union[str, None] = None, ae_model_file_path: Union[str, None]=None, device: str = "cpu"
     ) -> None:
         self.mash_channel = 400
+        self.encoded_mash_channel = 10
         self.mask_degree = 3
         self.sh_degree = 2
         self.d_hidden_embed = 48
         self.context_dim = 768
-        self.n_heads = 1
-        self.d_head = 256
+        self.n_heads = 8
+        self.d_head = 64
         self.depth = 24
         self.device = device
 
-        self.mask_dim = self.mask_degree * 2 + 1
-        self.sh_dim = (self.sh_degree + 1) ** 2
-
-        if True:
-            base_model = MashNet(n_latents=400, mask_degree=3, sh_degree=2,
-                                    d_hidden_embed=48, context_dim=768,n_heads=4,
-                                    d_head=64,depth=24)
-        else:
-            base_model = MashSSM().to(self.device)
+        model_id = 2
+        if model_id == 1:
+            base_model = MashNet(n_latents=self.mash_channel, mask_degree=self.mask_degree, sh_degree=self.sh_degree,
+                                    d_hidden_embed=self.d_hidden_embed, context_dim=self.context_dim,n_heads=self.n_heads,
+                                    d_head=self.d_head,depth=self.depth)
+        elif model_id == 2:
+            base_model = MashLatentNet(n_latents=self.mash_channel, channels=self.encoded_mash_channel,
+                                    context_dim=self.context_dim,n_heads=self.n_heads,
+                                    d_head=self.d_head,depth=self.depth)
+        elif model_id == 3:
+            #base_model = MashSSM().to(self.device)
+            pass
 
         self.model = DDPM(base_model,
                           betas=(1e-4, 0.02),
-                          n_T=1000,
+                          n_T=400,
                           device=self.device,
         ).to(self.device)
 
         if model_file_path is not None:
             self.loadModel(model_file_path)
 
-        HOME = os.environ["HOME"]
-        dataset_folder_path_list = [
-            HOME + "/Dataset/",
-            "/data2/lch/Dataset/",
-        ]
-        for dataset_folder_path in dataset_folder_path_list:
-            if not os.path.exists(dataset_folder_path):
-                continue
-
-            self.dataset_root_folder_path = dataset_folder_path
-            break
-
-        #TODO: for test only! need to generate pose with another net later
-        self.pose_dataset = MashDataset(self.dataset_root_folder_path)
+        self.detector = Detector(ae_model_file_path, device='cuda')
         return
 
     def toInitialMashModel(self, device: Union[str, None]=None) -> Mash:
@@ -103,43 +95,24 @@ class Sampler(object):
         self,
         sample_num: int,
         category_id: int = 0,
-        ) ->list: 
+        ) -> list: 
         self.model.eval()
 
-        pose_idxs = np.random.choice(range(len(self.pose_dataset)), sample_num)
+        condition = torch.ones([sample_num]).long().to(self.device) * category_id
 
-        pose_params_list = []
-        condition_list = []
-        for pose_idx in pose_idxs:
-            data = self.pose_dataset[pose_idx]
-            mash_params = data['mash_params']
-            category_id = data['category_id']
-            pose_params = mash_params[:, :6]
-
-            pose_params_list.append(pose_params.unsqueeze(0))
-            condition_list.append(category_id)
-
-        pose_params = torch.cat(pose_params_list, dim=0).to(self.device)
-        condition = torch.Tensor(condition_list).long().to(self.device)
-
-        condition_dict = {
-            'pose_params': pose_params,
-            'condition': condition,
-        }
-
-        shape_params, middle_shape_params_array = self.model.sample(
-            noise=torch.randn(sample_num, self.mash_channel, self.mask_dim + self.sh_dim).to(self.device),
-            condition_dict=condition_dict,
+        latents, middle_latents_array = self.model.sample(
+            noise=torch.randn(sample_num, self.mash_channel, self.encoded_mash_channel).to(self.device),
+            condition=condition,
             n_sample=sample_num,
             guide_w=1.0,
         )
 
-        pose_params = pose_params.cpu().numpy()
+        mash_params_list = self.detector.decodeLatent(latents.to('cuda')).to(self.device)
 
         mash_params_list = []
 
-        for middle_shape_params in middle_shape_params_array:
-            mash_params = np.concatenate([pose_params, middle_shape_params], axis=2)
-            mash_params_list.append(mash_params)
+        for middle_latents in middle_latents_array:
+            middle_mash_params = self.detector.decodeLatent(torch.from_numpy(middle_latents).type(latents.dtype).to('cuda')).to(self.device)
+            mash_params_list.append(middle_mash_params)
 
         return mash_params_list

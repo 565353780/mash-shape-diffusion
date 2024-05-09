@@ -1,6 +1,7 @@
 import sys
 
 sys.path.append("../ma-sh/")
+sys.path.append("../mash-autoencoder/")
 
 import os
 import torch
@@ -30,15 +31,17 @@ def demo():
 
     valid_model_folder_name_list.sort()
     model_folder_path = valid_model_folder_name_list[-1]
-    model_folder_path = 'pretrain-S'
+    model_folder_path = 'pretrain-10dim-2'
     model_file_path = output_folder_path + model_folder_path + "/model_last.pth"
-    device = "cuda"
+
+    ae_model_file_path = '../mash-autoencoder/output/pretrain-10dim/model_best.pth'
+    device = "cuda:0"
 
     sample_num = 9
     category_id = 18
 
     print(model_file_path)
-    sampler = Sampler(model_file_path, device)
+    sampler = Sampler(model_file_path, ae_model_file_path, device)
 
     print("start diffuse", sample_num, "mashs....")
     sampled_array_list = sampler.sample(sample_num, category_id)

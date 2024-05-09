@@ -43,7 +43,7 @@ class DDPM(nn.Module):
         # where w>0 means more guidance
 
         device = noise.device
-        store_skip_num = int(self.n_T/store_num)
+        store_skip_num = max(int(self.n_T/store_num), 1)
 
         x_i = noise  # x_T ~ N(0, 1), sample initial noise
         c_i = condition
@@ -66,6 +66,7 @@ class DDPM(nn.Module):
             )
             if i%store_skip_num==0 or i==self.n_T or i<=store_last_itr_num:
                 x_i_store.append(x_i.detach().cpu().numpy())
+        print()
 
         x_i_store = np.array(x_i_store)
         return x_i, x_i_store
