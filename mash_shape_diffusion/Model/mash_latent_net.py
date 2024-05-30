@@ -38,13 +38,6 @@ class MashLatentNet(torch.nn.Module):
         )
         return
 
-    def embedPose(self, pose_params: torch.Tensor) -> torch.Tensor:
-        rotation_embeddings = self.rotation_embed(pose_params[:, :, :3])
-        position_embeddings = self.position_embed(pose_params[:, :, 3:])
-
-        pose_embeddings = torch.cat([rotation_embeddings, position_embeddings], dim=2)
-        return pose_embeddings
-
     def emb_category(self, class_labels: torch.Tensor) -> torch.Tensor:
         return self.category_emb(class_labels).unsqueeze(1)
 
