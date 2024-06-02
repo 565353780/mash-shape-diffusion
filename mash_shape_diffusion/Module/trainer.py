@@ -16,6 +16,7 @@ from mash_shape_diffusion.Model.ddpm import DDPM
 from mash_shape_diffusion.Model.mash_net import MashNet
 from mash_shape_diffusion.Model.mash_ssm import MashSSM
 from mash_shape_diffusion.Model.mash_latent_net import MashLatentNet
+from mash_shape_diffusion.Model.mash_unet import MashUNet
 from mash_shape_diffusion.Method.path import createFileFolder, renameFile, removeFile
 from mash_shape_diffusion.Method.time import getCurrentTime
 from mash_shape_diffusion.Module.logger import Logger
@@ -40,7 +41,7 @@ class Trainer(object):
         betas = (1e-4, 0.02)
         n_T = 1000
 
-        self.batch_size = 48
+        self.batch_size = 32
         self.accumulation_steps = 1
         self.num_workers = 0
         self.lr = 5e-4
@@ -48,7 +49,7 @@ class Trainer(object):
         self.factor = 0.9
         self.patience = 1000
         self.min_lr = 1e-6
-        self.warmup_epochs = 1
+        self.warmup_epochs = 0
         self.train_epochs = 100000
         self.step = 0
         self.eval_step = 0
@@ -89,7 +90,7 @@ class Trainer(object):
         self.device_id = dist.get_rank() % torch.cuda.device_count()
         self.device = "cuda:" + str(self.device_id)
 
-        model_id = 2
+        model_id = 4
         if model_id == 1:
             base_model = MashNet(n_latents=self.mash_channel, mask_degree=self.mask_degree, sh_degree=self.sh_degree,
                                     d_hidden_embed=self.d_hidden_embed, context_dim=self.context_dim,n_heads=self.n_heads,
@@ -100,7 +101,8 @@ class Trainer(object):
                                     d_head=self.d_head,depth=self.depth)
         elif model_id == 3:
             base_model = MashSSM().to(self.device)
-            pass
+        elif model_id == 4:
+            base_model = MashUNet(self.context_dim).to(self.device)
 
         self.model = DDPM(base_model,
                           betas=betas,
