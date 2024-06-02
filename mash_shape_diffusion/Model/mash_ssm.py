@@ -23,7 +23,7 @@ class MashSSM(nn.Module):
         d_cond: int = 768,
         d_t: int = 256,
         n_layer: int = 12,
-        n_cross: int = 4,
+        n_cross: int = 1,
         ssm_cfg=None,
         norm_epsilon: float = 1e-5,
         rms_norm: bool = True,
@@ -84,8 +84,9 @@ class MashSSM(nn.Module):
         )
         self.decoder_ff = PreNorm(d_hidden, FeedForward(d_hidden))
 
+        # remove t and condition channel
         self.fuse_channel = nn.Linear(402, 400)
-        self.to_outputs = nn.Linear(d_hidden, self.mask_dim + self.sh_dim)
+        self.to_outputs = nn.Linear(d_hidden, 6 + self.mask_dim + self.sh_dim)
 
         self.apply(
             partial(
@@ -96,11 +97,11 @@ class MashSSM(nn.Module):
         )
         return
 
-    def embedMash(self, pose_params: torch.Tensor, shape_params: torch.Tensor) -> torch.Tensor:
-        rotation_embeddings = self.rotation_embed(pose_params[:, :, :3])
-        position_embeddings = self.position_embed(pose_params[:, :, 3:])
-        mask_embeddings = self.mask_embed(shape_params[:, :, : self.mask_dim])
-        sh_embeddings = self.sh_embed(shape_params[:, :, self.mask_dim :])
+    def embedMash(self, mash_params: torch.Tensor) -> torch.Tensor:
+        rotation_embeddings = self.rotation_embed(mash_params[:, :, :3])
+        position_embeddings = self.position_embed(mash_params[:, :, 3:6])
+        mask_embeddings = self.mask_embed(mash_params[:, :, 6: 6+ self.mask_dim])
+        sh_embeddings = self.sh_embed(mash_params[:, :, 6+self.mask_dim :])
 
         mash_embeddings = torch.cat(
             [rotation_embeddings, position_embeddings, mask_embeddings, sh_embeddings],
@@ -111,8 +112,8 @@ class MashSSM(nn.Module):
     def emb_category(self, class_labels):
         return self.category_emb(class_labels).unsqueeze(1)
 
-    def forwardCondition(self, shape_params, pose_params, condition, t):
-        mash_embeddings = self.embedMash(pose_params, shape_params)
+    def forwardCondition(self, mash_params, condition, t):
+        mash_embeddings = self.embedMash(mash_params)
 
         t_emb = self.map_noise(t)[:, None]
         t_emb = F.silu(self.map_layer0(t_emb))
@@ -147,17 +148,14 @@ class MashSSM(nn.Module):
         shape_params_noise = self.to_outputs(latents).squeeze(-1)
         return shape_params_noise
 
-    def forward(self, shape_params, condition_dict, t, condition_drop_prob):
-        pose_params = condition_dict['pose_params']
-        condition = condition_dict['condition']
-
+    def forward(self, mash_params, condition, t, condition_drop_prob):
         if condition.dtype == torch.float32:
-            condition = condition + 0.0 * self.emb_category(torch.zeros([shape_params.shape[0]], dtype=torch.long, device=shape_params.device))
+            condition = condition + 0.0 * self.emb_category(torch.zeros([mash_params.shape[0]], dtype=torch.long, device=mash_params.device))
         else:
             condition = self.emb_category(condition)
 
         # dropout context with some probability
-        context_mask = torch.bernoulli(torch.ones_like(condition)-condition_drop_prob).to(shape_params.device)
+        context_mask = torch.bernoulli(torch.ones_like(condition)-condition_drop_prob).to(mash_params.device)
         condition = condition * context_mask
 
-        return self.forwardCondition(shape_params, pose_params, condition, t)
+        return self.forwardCondition(mash_params, condition, t)

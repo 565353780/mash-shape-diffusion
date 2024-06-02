@@ -13,25 +13,25 @@ class ImageEmbeddingDataset(Dataset):
         self.dataset_root_folder_path = dataset_root_folder_path
         self.preload = preload
 
-        self.encoded_mash_folder_path = self.dataset_root_folder_path + "EncodedMash/"
+        self.mash_folder_path = self.dataset_root_folder_path + "MashV4/"
         self.image_embedding_folder_path = self.dataset_root_folder_path + "ImageEmbedding/"
 
-        assert os.path.exists(self.encoded_mash_folder_path)
+        assert os.path.exists(self.mash_folder_path)
         assert os.path.exists(self.image_embedding_folder_path)
 
         self.path_dict_list = []
 
-        dataset_name_list = os.listdir(self.encoded_mash_folder_path)
+        dataset_name_list = os.listdir(self.mash_folder_path)
 
         for dataset_name in dataset_name_list:
-            dataset_folder_path = self.encoded_mash_folder_path + dataset_name + "/"
+            dataset_folder_path = self.mash_folder_path + dataset_name + "/"
 
             categories = os.listdir(dataset_folder_path)
 
             for i, category in enumerate(categories):
                 class_folder_path = dataset_folder_path + category + "/"
 
-                encoded_mash_filename_list = os.listdir(class_folder_path)
+                mash_filename_list = os.listdir(class_folder_path)
 
                 print("[INFO][ImageEmbeddingDataset::__init__]")
                 print(
@@ -45,26 +45,26 @@ class ImageEmbeddingDataset(Dataset):
                     + str(len(categories))
                     + "..."
                 )
-                for encoded_mash_filename in encoded_mash_filename_list:
+                for mash_filename in mash_filename_list:
                     path_dict = {}
-                    encoded_mash_file_path = class_folder_path + encoded_mash_filename
+                    mash_file_path = class_folder_path + mash_filename
 
-                    if not os.path.exists(encoded_mash_file_path):
+                    if not os.path.exists(mash_file_path):
                         continue
 
                     image_embedding_file_path = self.image_embedding_folder_path + dataset_name + '/' + \
-                        category + '/' + encoded_mash_filename
+                        category + '/' + mash_filename
 
                     if not os.path.exists(image_embedding_file_path):
                         continue
 
                     if self.preload:
-                        encoded_mash = np.load(encoded_mash_file_path)
+                        mash_params = np.load(mash_file_path, allow_pickle=True).item()
                         image_embedding = np.load(image_embedding_file_path, allow_pickle=True).item()
-                        path_dict['encoded_mash'] = encoded_mash
+                        path_dict['mash'] = mash_params
                         path_dict['image_embedding'] = image_embedding
                     else:
-                        path_dict['encoded_mash'] = encoded_mash_file_path
+                        path_dict['mash'] = mash_file_path
                         path_dict['image_embedding'] = image_embedding_file_path
 
                     self.path_dict_list.append(path_dict)
@@ -81,17 +81,47 @@ class ImageEmbeddingDataset(Dataset):
         path_dict = self.path_dict_list[index]
 
         if self.preload:
-            encoded_mash = path_dict['encoded_mash']
+            mash_params = path_dict['mash']
             image_embedding = path_dict['image_embedding']
         else:
-            encoded_mash_file_path = path_dict['encoded_mash']
+            mash_file_path = path_dict['mash']
             image_embedding_file_path = path_dict['image_embedding']
-            encoded_mash = np.load(encoded_mash_file_path)
+            mash_params = np.load(mash_file_path, allow_pickle=True).item()
             image_embedding = np.load(image_embedding_file_path, allow_pickle=True).item()
 
-        encoded_mash_tensor = torch.from_numpy(encoded_mash).float()
+        rotate_vectors = mash_params["rotate_vectors"]
+        positions = mash_params["positions"]
+        mask_params = mash_params["mask_params"]
+        sh_params = mash_params["sh_params"]
 
-        data['encoded_mash'] = encoded_mash_tensor
+        if False:
+            scale_range = [0.9, 1.1]
+            move_range = [-0.1, 0.1]
+
+            random_scale = (
+                scale_range[0] + (scale_range[1] - scale_range[0]) * np.random.rand()
+            )
+            random_translate = move_range[0] + (
+                move_range[1] - move_range[0]
+            ) * np.random.rand(3)
+
+            mash_params = np.hstack(
+                [
+                    rotate_vectors,
+                    positions * random_scale + random_translate,
+                    mask_params,
+                    sh_params * random_scale,
+                ]
+            )
+        else:
+            mash_params = np.hstack([rotate_vectors, positions, mask_params, sh_params])
+
+        if True:
+            mash_params = mash_params[np.random.permutation(mash_params.shape[0])]
+
+        mash_tensor = torch.from_numpy(mash_params).float()
+
+        data['mash'] = mash_tensor
 
         image_embedding_tensor = {}
 

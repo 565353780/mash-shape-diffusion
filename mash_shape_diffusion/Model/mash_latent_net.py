@@ -8,11 +8,11 @@ class MashLatentNet(torch.nn.Module):
     def __init__(
         self,
         n_latents: int =400,
-        channels: int = 10,
+        channels: int = 22,
         context_dim=768,
         n_heads=8,
         d_head=64,
-        depth=24,
+        depth=12,
         sigma_min=0,
         sigma_max=float("inf"),
         sigma_data=1,

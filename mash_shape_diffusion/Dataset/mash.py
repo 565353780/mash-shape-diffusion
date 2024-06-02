@@ -13,7 +13,7 @@ class MashDataset(Dataset):
     ) -> None:
         self.dataset_root_folder_path = dataset_root_folder_path
 
-        self.mash_folder_path = self.dataset_root_folder_path + "MashV3/"
+        self.mash_folder_path = self.dataset_root_folder_path + "MashV4/"
 
         assert os.path.exists(self.mash_folder_path)
 
@@ -75,7 +75,7 @@ class MashDataset(Dataset):
         mask_params = mash_params["mask_params"]
         sh_params = mash_params["sh_params"]
 
-        if True:
+        if False:
             scale_range = [0.9, 1.1]
             move_range = [-0.1, 0.1]
 
@@ -97,12 +97,12 @@ class MashDataset(Dataset):
         else:
             mash_params = np.hstack([rotate_vectors, positions, mask_params, sh_params])
 
-        if False:
+        if True:
             mash_params = mash_params[np.random.permutation(mash_params.shape[0])]
 
         mash_params = torch.from_numpy(mash_params)
 
-        data['mash_params'] = mash_params.float()
+        data['mash'] = mash_params.float()
 
         data['category_id'] = path_dict['category_id']
         return data

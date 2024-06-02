@@ -4,13 +4,9 @@ sys.path.append("../ma-sh/")
 sys.path.append("../mash-autoencoder/")
 
 import os
-import torch
 import open3d as o3d
 from tqdm import tqdm
 from math import sqrt, ceil
-
-from ma_sh.Method.data import toNumpy
-from ma_sh.Method.pcd import getPointCloud
 
 from mash_shape_diffusion.Module.sampler import Sampler
 
@@ -31,20 +27,19 @@ def demo():
 
     valid_model_folder_name_list.sort()
     model_folder_path = valid_model_folder_name_list[-1]
-    model_folder_path = 'pretrain-10dim-2'
+    #model_folder_path = 'pretrain-single-v1'
     model_file_path = output_folder_path + model_folder_path + "/model_last.pth"
 
-    ae_model_file_path = '../mash-autoencoder/output/pretrain-10dim/model_best.pth'
     device = "cuda:0"
 
     sample_num = 9
     category_id = 18
 
     print(model_file_path)
-    sampler = Sampler(model_file_path, ae_model_file_path, device)
+    sampler = Sampler(model_file_path, device)
 
     print("start diffuse", sample_num, "mashs....")
-    sampled_array_list = sampler.sample(sample_num, category_id)
+    sampled_array = sampler.sample(sample_num, category_id)
 
     object_dist = [2, 2, 2]
 
@@ -52,8 +47,8 @@ def demo():
 
     mash_model = sampler.toInitialMashModel('cpu')
 
-    for j in range(len(sampled_array_list)):
-        if j != len(sampled_array_list) -  1:
+    for j in range(sampled_array.shape[0]):
+        if j != sampled_array.shape[0] -  1:
             continue
 
         save_folder_path = './output/sample/save_itr_' + str(j) + '/'
@@ -61,7 +56,7 @@ def demo():
 
         for i in tqdm(range(sample_num)):
 
-            mash_params = sampled_array_list[j][i]
+            mash_params = sampled_array[j][i]
 
             sh2d = 2 * sampler.mask_degree + 1
             rotation_vectors = mash_params[:, :3]
@@ -70,7 +65,7 @@ def demo():
             sh_params = mash_params[:, 6 + sh2d :]
 
             mash_model.loadParams(mask_params, sh_params, rotation_vectors, positions)
-            mash_pcd = getPointCloud(toNumpy(torch.vstack(mash_model.toSamplePoints()[:2])))
+            mash_pcd = mash_model.toSamplePcd()
 
             if True:
                 translate = [

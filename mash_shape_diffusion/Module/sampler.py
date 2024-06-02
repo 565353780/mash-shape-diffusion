@@ -1,10 +1,9 @@
 import os
 import torch
+import numpy as np
 from typing import Union
 
 from ma_sh.Model.mash import Mash
-
-from mash_autoencoder.Module.detector import Detector
 
 from mash_shape_diffusion.Model.ddpm import DDPM
 from mash_shape_diffusion.Model.mash_net import MashNet
@@ -14,20 +13,23 @@ from mash_shape_diffusion.Model.mash_latent_net import MashLatentNet
 
 class Sampler(object):
     def __init__(
-        self, model_file_path: Union[str, None] = None, ae_model_file_path: Union[str, None]=None, device: str = "cpu"
+        self, model_file_path: Union[str, None] = None, device: str = "cpu"
     ) -> None:
         self.mash_channel = 400
-        self.encoded_mash_channel = 10
+        self.encoded_mash_channel = 22
         self.mask_degree = 3
         self.sh_degree = 2
         self.d_hidden_embed = 48
         self.context_dim = 768
-        self.n_heads = 8
+        self.n_heads = 1
         self.d_head = 64
         self.depth = 24
         self.device = device
 
-        model_id = 2
+        betas = (1e-4, 0.02)
+        n_T = 1000
+
+        model_id = 3
         if model_id == 1:
             base_model = MashNet(n_latents=self.mash_channel, mask_degree=self.mask_degree, sh_degree=self.sh_degree,
                                     d_hidden_embed=self.d_hidden_embed, context_dim=self.context_dim,n_heads=self.n_heads,
@@ -41,15 +43,13 @@ class Sampler(object):
             pass
 
         self.model = DDPM(base_model,
-                          betas=(1e-4, 0.02),
-                          n_T=400,
+                          betas=betas,
+                          n_T=n_T,
                           device=self.device,
         ).to(self.device)
 
         if model_file_path is not None:
             self.loadModel(model_file_path)
-
-        self.detector = Detector(ae_model_file_path, device='cuda')
         return
 
     def toInitialMashModel(self, device: Union[str, None]=None) -> Mash:
@@ -95,24 +95,16 @@ class Sampler(object):
         self,
         sample_num: int,
         category_id: int = 0,
-        ) -> list: 
+        ) -> np.ndarray: 
         self.model.eval()
 
         condition = torch.ones([sample_num]).long().to(self.device) * category_id
 
-        latents, middle_latents_array = self.model.sample(
+        mash_params, middle_mash_params_array = self.model.sample(
             noise=torch.randn(sample_num, self.mash_channel, self.encoded_mash_channel).to(self.device),
             condition=condition,
             n_sample=sample_num,
             guide_w=1.0,
         )
 
-        mash_params_list = self.detector.decodeLatent(latents.to('cuda')).to(self.device)
-
-        mash_params_list = []
-
-        for middle_latents in middle_latents_array:
-            middle_mash_params = self.detector.decodeLatent(torch.from_numpy(middle_latents).type(latents.dtype).to('cuda')).to(self.device)
-            mash_params_list.append(middle_mash_params)
-
-        return mash_params_list
+        return middle_mash_params_array
