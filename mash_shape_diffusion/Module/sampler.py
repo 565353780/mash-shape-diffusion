@@ -9,6 +9,7 @@ from mash_shape_diffusion.Model.ddpm import DDPM
 from mash_shape_diffusion.Model.mash_net import MashNet
 from mash_shape_diffusion.Model.mash_ssm import MashSSM
 from mash_shape_diffusion.Model.mash_latent_net import MashLatentNet
+from mash_shape_diffusion.Model.mash_unet import MashUNet
 
 
 class Sampler(object):
@@ -21,7 +22,7 @@ class Sampler(object):
         self.sh_degree = 2
         self.d_hidden_embed = 48
         self.context_dim = 768
-        self.n_heads = 1
+        self.n_heads = 4
         self.d_head = 64
         self.depth = 24
         self.device = device
@@ -29,7 +30,7 @@ class Sampler(object):
         betas = (1e-4, 0.02)
         n_T = 1000
 
-        model_id = 3
+        model_id = 1
         if model_id == 1:
             base_model = MashNet(n_latents=self.mash_channel, mask_degree=self.mask_degree, sh_degree=self.sh_degree,
                                     d_hidden_embed=self.d_hidden_embed, context_dim=self.context_dim,n_heads=self.n_heads,
@@ -39,8 +40,9 @@ class Sampler(object):
                                     context_dim=self.context_dim,n_heads=self.n_heads,
                                     d_head=self.d_head,depth=self.depth)
         elif model_id == 3:
-            #base_model = MashSSM().to(self.device)
-            pass
+            base_model = MashSSM().to(self.device)
+        elif model_id == 4:
+            base_model = MashUNet(self.context_dim).to(self.device)
 
         self.model = DDPM(base_model,
                           betas=betas,

@@ -41,15 +41,15 @@ class Trainer(object):
         betas = (1e-4, 0.02)
         n_T = 1000
 
-        self.batch_size = 32
+        self.batch_size = 48
         self.accumulation_steps = 1
         self.num_workers = 0
-        self.lr = 5e-4
+        self.lr = 5e-5
         self.weight_decay = 1e-10
         self.factor = 0.9
         self.patience = 1000
         self.min_lr = 1e-6
-        self.warmup_epochs = 0
+        self.warmup_epochs = 1
         self.train_epochs = 100000
         self.step = 0
         self.eval_step = 0
@@ -90,7 +90,7 @@ class Trainer(object):
         self.device_id = dist.get_rank() % torch.cuda.device_count()
         self.device = "cuda:" + str(self.device_id)
 
-        model_id = 4
+        model_id = 1
         if model_id == 1:
             base_model = MashNet(n_latents=self.mash_channel, mask_degree=self.mask_degree, sh_degree=self.sh_degree,
                                     d_hidden_embed=self.d_hidden_embed, context_dim=self.context_dim,n_heads=self.n_heads,

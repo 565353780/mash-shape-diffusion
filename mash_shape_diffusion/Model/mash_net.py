@@ -13,8 +13,8 @@ class MashNet(torch.nn.Module):
         sh_degree: int = 2,
         d_hidden_embed: int = 48,
         context_dim=768,
-        n_heads=1,
-        d_head=256,
+        n_heads=8,
+        d_head=64,
         depth=12,
         sigma_min=0,
         sigma_max=float("inf"),
@@ -29,13 +29,15 @@ class MashNet(torch.nn.Module):
         self.mask_dim = 2 * mask_degree + 1
         self.sh_dim = (sh_degree + 1) ** 2
 
-        self.channels = self.mask_dim + self.sh_dim
+        #self.channels = 6 + self.mask_dim + self.sh_dim
+        self.channels = context_dim
 
-        d_hidden = n_heads * d_head
-        assert d_hidden % 2 == 0
+        assert context_dim % 4 == 0
 
-        self.rotation_embed = PointEmbed(3, d_hidden_embed, context_dim // 2)
-        self.position_embed = PointEmbed(3, d_hidden_embed, context_dim // 2)
+        self.rotation_embed = PointEmbed(3, d_hidden_embed, context_dim // 4)
+        self.position_embed = PointEmbed(3, d_hidden_embed, context_dim // 4)
+        self.mask_embed = PointEmbed(self.mask_dim, d_hidden_embed, context_dim // 4)
+        self.sh_embed = PointEmbed(self.sh_dim, d_hidden_embed, context_dim // 4)
 
         self.category_emb = nn.Embedding(55, context_dim)
 
@@ -47,36 +49,40 @@ class MashNet(torch.nn.Module):
             depth=depth,
             context_dim=context_dim,
         )
+
+        self.to_outputs = nn.Linear(self.channels, 6 + self.mask_dim + self.sh_dim)
         return
 
-    def embedPose(self, pose_params: torch.Tensor) -> torch.Tensor:
-        rotation_embeddings = self.rotation_embed(pose_params[:, :, :3])
-        position_embeddings = self.position_embed(pose_params[:, :, 3:])
+    def embedMash(self, mash_params: torch.Tensor) -> torch.Tensor:
+        rotation_embeddings = self.rotation_embed(mash_params[:, :, :3])
+        position_embeddings = self.position_embed(mash_params[:, :, 3:6])
+        mask_embeddings = self.mask_embed(mash_params[:, :, 6: 6+ self.mask_dim])
+        sh_embeddings = self.sh_embed(mash_params[:, :, 6+self.mask_dim :])
 
-        pose_embeddings = torch.cat([rotation_embeddings, position_embeddings], dim=2)
-        return pose_embeddings
+        mash_embeddings = torch.cat(
+            [rotation_embeddings, position_embeddings, mask_embeddings, sh_embeddings],
+            dim=2,
+        )
+        return mash_embeddings
 
     def emb_category(self, class_labels):
         return self.category_emb(class_labels).unsqueeze(1)
 
-    def forwardCondition(self, shape_params, pose_params, condition, t):
-        pose_embeddings = self.embedPose(pose_params)
-        condition = torch.cat([pose_embeddings, condition], dim=1)
+    def forwardCondition(self, mash_params, condition, t):
+        mash_embeddings = self.embedMash(mash_params)
 
-        shape_params_noise = self.model(shape_params, t, cond=condition)
-        return shape_params_noise
+        mash_params_noise = self.model(mash_embeddings, t, cond=condition)
+        mash_params_noise = self.to_outputs(mash_params_noise)
+        return mash_params_noise
 
-    def forward(self, shape_params, condition_dict, t, condition_drop_prob):
-        pose_params = condition_dict['pose_params']
-        condition = condition_dict['condition']
-
+    def forward(self, mash_params, condition, t, condition_drop_prob):
         if condition.dtype == torch.float32:
-            condition = condition + 0.0 * self.emb_category(torch.zeros([shape_params.shape[0]], dtype=torch.long, device=shape_params.device))
+            condition = condition + 0.0 * self.emb_category(torch.zeros([mash_params.shape[0]], dtype=torch.long, device=mash_params.device))
         else:
             condition = self.emb_category(condition)
 
         # dropout context with some probability
-        context_mask = torch.bernoulli(torch.ones_like(condition)-condition_drop_prob).to(shape_params.device)
+        context_mask = torch.bernoulli(torch.ones_like(condition)-condition_drop_prob).to(mash_params.device)
         condition = condition * context_mask
 
-        return self.forwardCondition(shape_params, pose_params, condition, t)
+        return self.forwardCondition(mash_params, condition, t)
